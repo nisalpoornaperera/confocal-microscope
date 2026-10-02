@@ -1,0 +1,155 @@
+# Confocal surface scanner configuration (example).
+#
+# Copy to /etc/confocal/confocal.toml on the Pi and point CONFOCAL_CONFIG at it.
+# Every key is optional; omitted keys use safe simulation defaults.
+#
+# Only machine constants belong here. Calibration values (dark / reference
+# levels) are MEASURED at runtime and versioned in the database - never put
+# them in this file.
+
+[hardware]
+stage = "simulation"   # simulation | arduino (Phase 3) | openflexure (Phase 11)
+adc = "simulation"     # simulation | ads1115 (Phase 4)
+laser = "simulation"   # simulation | manual | gpio (Phase 4)
+camera = "none"        # none | simulation
+
+[motion]
+position_tolerance_um = 0.5   # max |reported - commanded| per axis before a move fails
+move_timeout_s = 120.0        # fixed margin (s) added to every move's distance-aware timeout:
+                              #   timeout = move_timeout_factor x (distance / speed) + move_timeout_s
+move_timeout_factor = 2.0     # safety factor on a move's expected duration
+xy_speed_um_s = 40.0          # used for scan-time estimates
+z_speed_um_s = 30.0
+per_move_overhead_s = 0.01
+release_motors_when_idle = true
+
+# Software travel limits in micrometres, relative to the origin set at power-up
+# (the 28BYJ-48 OpenFlexure stage has no end-stops). Set these per machine.
+[limits.x]
+min_um = -5000.0
+max_um = 5000.0
+
+[limits.y]
+min_um = -5000.0
+max_um = 5000.0
+
+[limits.z]
+min_um = -2000.0
+max_um = 2000.0
+
+# How Cartesian micrometres map onto the three motors (hardware layer only).
+# The scale factors are approximate and MUST be calibrated per machine.
+[kinematics]
+geometry = "delta"          # delta (OpenFlexure Delta Stage) | cartesian | matrix
+delta_flex_h = 80.0         # flexure lever dimensions; only ratios matter
+delta_flex_a = 50.0
+delta_flex_b = 50.0
+um_per_step = [0.06, 0.06, 0.06]   # delta: um per stage step along x, y, z
+xy_rotation_deg = 0.0       # rotate the X/Y frame (0 without a camera)
+# steps_per_um = [14.3, 14.3, 20.0]   # cartesian: motor a->X, b->Y, c->Z
+# Measured matrix (recommended once calibrated): row = x/y/z, column = motor a/b/c,
+# value = micrometres moved along that axis per step of that motor.
+# um_per_step_matrix = [[0.0433, -0.0433, 0.0], [-0.0188, -0.0188, 0.0375], [0.02, 0.02, 0.02]]
+
+[arduino]
+# Arduino Uno (or Nano) + 3x ULN2003. Genuine Uno -> /dev/ttyACM0, CH340 clone -> /dev/ttyUSB0.
+# Prefer the stable path from `ls /dev/serial/by-id/`.
+port = "/dev/ttyACM0"
+baudrate = 115200
+timeout_s = 2.0
+handshake_timeout_s = 5.0
+
+# One section per motor / leg (wiring in docs/wiring.md). Steps count from the
+# power-up origin; min/max_steps are each actuator's safe travel, and the
+# Cartesian [limits] are checked at startup to lie entirely inside them.
+[arduino.a]
+invert = false
+backlash_steps = 0          # measure and set; every move then finishes approaching +
+max_speed_steps_s = 600.0
+min_steps = -200000
+max_steps = 200000
+
+[arduino.b]
+invert = false
+backlash_steps = 0
+max_speed_steps_s = 600.0
+min_steps = -200000
+max_steps = 200000
+
+[arduino.c]
+invert = false
+backlash_steps = 0
+max_speed_steps_s = 600.0
+min_steps = -200000
+max_steps = 200000
+
+[ads1115]
+i2c_bus = 1
+address = 0x48
+channel = 0
+differential = false
+gain = "1"             # "2/3" | "1" | "2" | "4" | "8" | "16"  (1 = +/-4.096 V, suits a 5 V OPT101)
+data_rate_sps = 860
+
+[laser]
+wavelength_nm = 650.0
+power_mw = 5.0
+# gpio_pin = 17
+warmup_s = 0.5
+
+[simulation]
+seed = 1234
+time_scale = 0.05      # 0 = instantaneous, 1 = real time
+psf_model = "gaussian" # gaussian | sinc2
+axial_fwhm_um = 6.0
+peak_voltage_v = 1.6
+background_v = 0.05
+dark_voltage_v = 0.0075
+read_noise_v = 0.002
+shot_noise_fraction = 0.01
+opt101_saturation_v = 2.0   # simulated OPT101 output rail (3.3 V supply)
+# (simulated stage positions are quantised through [kinematics], like the real stage)
+
+[simulation.surface]
+kind = "composite"     # plane | sinusoid | steps | sphere | composite
+base_z_um = 0.0
+tilt_x = 0.002
+tilt_y = -0.001
+feature_amplitude_um = 5.0
+feature_period_um = 400.0
+step_height_um = 3.0
+sphere_radius_um = 150.0
+sphere_height_um = 8.0
+reflectivity = 0.9
+low_reflectivity_fraction = 0.03
+spurious_peak_probability = 0.01
+
+[storage]
+data_dir = "/var/lib/confocal"
+
+[server]
+host = "0.0.0.0"
+port = 8000
+cors_origins = ["http://localhost:5173"]
+websocket_queue_size = 256
+log_level = "info"
+
+# I(Z) processing defaults. Each scan sends its own processing config; of this
+# section only saturation_v is applied to scans: it becomes the scan's
+# saturation_v when the scan sets none. Independently, samples at or above
+# 0.98 x the ADC full scale of the gain in effect always count as saturated.
+[processing]
+filter_method = "savgol"
+filter_window = 5
+savgol_polyorder = 2
+min_snr = 5.0
+min_relative_prominence = 0.3
+fit_window_fwhm = 1.5
+max_fit_disagreement_um = 1.0
+edge_margin_samples = 2
+min_confidence = 0.5
+# saturation_v = 1.95         # detector output rail (V); unset = only the ADC rail
+
+[ml]
+# models_dir = "/var/lib/confocal/models"
+# default_model = "bad-point-rf"

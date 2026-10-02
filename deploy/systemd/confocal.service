@@ -1,0 +1,32 @@
+[Unit]
+Description=Confocal surface scanner (FastAPI backend)
+Documentation=file:///opt/confocal/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=confocal
+Group=confocal
+# Serial port (Arduino Uno), I2C (ADS1115) and GPIO (laser) access.
+SupplementaryGroups=dialout i2c gpio
+WorkingDirectory=/opt/confocal/backend
+Environment=CONFOCAL_CONFIG=/etc/confocal/confocal.toml
+Environment=CONFOCAL_DATA_DIR=/var/lib/confocal
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/confocal/backend/.venv/bin/confocal-server
+Restart=on-failure
+RestartSec=5
+# On stop the server cancels any active scan, records it as interrupted,
+# stops the stage and switches the laser off; give it time to flush HDF5.
+TimeoutStopSec=30
+
+StateDirectory=confocal
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/confocal
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

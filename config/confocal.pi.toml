@@ -1,0 +1,57 @@
+# Configuration for THIS machine: Raspberry Pi 5 + HDMI monitor,
+# OpenFlexure Delta Stage driven by an Arduino Uno + 3x ULN2003,
+# ADS1115 + OPT101 on 3.3 V (see docs/wiring.md), manually switched laser.
+#
+# Install as /etc/confocal/confocal.toml. Keys not listed use the defaults
+# documented in config/confocal.example.toml.
+#
+# NOTE: the "arduino" stage and "ads1115" ADC drivers are still being written
+# (Phases 3 and 4). Until they exist the server refuses to start with this file
+# and names the missing driver - by design, it never falls back to simulation.
+
+[hardware]
+stage = "arduino"
+adc = "ads1115"
+laser = "manual"       # always-on / manual switch: dark calibration asks you to block the beam
+camera = "none"
+
+[arduino]
+port = "/dev/ttyACM0"  # replace with the path shown by `ls /dev/serial/by-id/`
+
+[ads1115]
+i2c_bus = 1
+address = 0x48         # ADDR pin to GND
+channel = 0            # OPT101 output on A0
+gain = "2"             # +/-2.048 V: OPT101 on 3.3 V outputs up to ~2 V
+data_rate_sps = 860
+
+# The OPT101 on a 3.3 V supply clips near 2.0 V, below the ADC full scale at
+# gain 2 (2.048 V): without this the clipped top of a bright focus peak would
+# look like a valid, flat-topped peak. Applied to every scan that sets no
+# saturation_v of its own.
+[processing]
+saturation_v = 1.95
+
+[laser]
+wavelength_nm = 650.0
+power_mw = 5.0
+
+[storage]
+data_dir = "/var/lib/confocal"
+
+[server]
+host = "127.0.0.1"     # UI shown on the Pi's own screen; use "0.0.0.0" to also reach it from other computers
+port = 8000
+
+# Travel limits: start small and widen them after checking the stage's real range.
+[limits.x]
+min_um = -1000.0
+max_um = 1000.0
+
+[limits.y]
+min_um = -1000.0
+max_um = 1000.0
+
+[limits.z]
+min_um = -500.0
+max_um = 500.0

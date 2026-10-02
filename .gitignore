@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# Runtime data (SQLite metadata, HDF5 measurements, deployed ML models)
+backend/data/
+*.h5
+*.hdf5
+*.db
+*.db-wal
+*.db-shm
+
+# Frontend
+frontend/node_modules/
+# frontend/dist/ is committed on purpose: the Pi serves it and needs no Node.js
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

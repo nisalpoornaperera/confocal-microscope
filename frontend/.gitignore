@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.vite/
+coverage/
+# scripts/gen-api.mjs writes the schema here before generating src/api/schema.ts
+openapi.json
