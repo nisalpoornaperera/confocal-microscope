@@ -66,6 +66,15 @@ class ProcessingConfig(BaseModel):
     edge_margin_samples: int = Field(
         2, ge=0, le=50, description="A peak this close to the sweep end is 'at edge'."
     )
+    accept_weak_peaks: bool = Field(
+        default=False,
+        description=(
+            "Low-contrast mode: keep a peak that is not significant against the noise "
+            "(the fixed 4-sigma rule) as long as it passes min_snr and "
+            "min_relative_prominence. Such points get the 'weak_peak' flag and are at "
+            "most LOW_CONFIDENCE, never VALID."
+        ),
+    )
     min_confidence: float = Field(
         0.5, ge=0, le=1, description="Below this the point is LOW_CONFIDENCE, not VALID."
     )

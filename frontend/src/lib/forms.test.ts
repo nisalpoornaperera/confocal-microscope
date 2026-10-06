@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { DEFAULT_PREFERENCES, parsePreferences } from "./prefs";
-import { configToForm, DEFAULT_SCAN_FORM, formToConfig, parseNumber } from "./scanForm";
+import { applyDetectionPreset, configToForm, DEFAULT_SCAN_FORM, formToConfig, parseNumber } from "./scanForm";
 import { autoScale, crossSection, sceneAspect, scaleToSlider, sliderToScale } from "./surface";
 
 describe("scan form", () => {
@@ -50,10 +50,41 @@ describe("scan form", () => {
   it("round-trips a stored scan configuration", () => {
     const { config } = formToConfig({ ...DEFAULT_SCAN_FORM, name: "repeat me", order: "raster" });
     if (!config) throw new Error("invalid");
-    const form = configToForm({ ...config, reconstruction: undefined });
+    const form = configToForm({ ...config, processing: undefined, reconstruction: undefined });
     expect(form.name).toBe("repeat me");
     expect(form.order).toBe("raster");
     expect(form.xy_step_um).toBe("20");
+    expect(form.fine_scan).toBe(true);
+  });
+
+  it("turning the fine scan off ignores invalid fine fields", () => {
+    const bad = { ...DEFAULT_SCAN_FORM, fine_z_step_um: "", fine_z_range_um: "abc" };
+    expect(formToConfig(bad).config).toBeNull();
+    const { config, errors } = formToConfig({ ...bad, fine_scan: false });
+    expect(errors).toEqual({});
+    expect(config?.fine_scan).toBe(false);
+  });
+
+  it("applies the low-contrast detection preset", () => {
+    const form = applyDetectionPreset(DEFAULT_SCAN_FORM, "low_contrast");
+    expect(form.detection_preset).toBe("low_contrast");
+    const { config } = formToConfig(form);
+    expect(config?.processing).toEqual({
+      accept_weak_peaks: true,
+      min_snr: 2,
+      min_relative_prominence: 0.05,
+      min_confidence: 0.2,
+    });
+    expect(config?.reconstruction?.min_confidence).toBe(0.1);
+    const back = applyDetectionPreset(form, "standard");
+    expect(formToConfig(back).config?.processing?.accept_weak_peaks).toBe(false);
+    expect(formToConfig(back).config?.processing?.min_snr).toBe(5);
+  });
+
+  it("rejects out-of-range detection thresholds", () => {
+    const { config, errors } = formToConfig({ ...DEFAULT_SCAN_FORM, min_relative_prominence: "2" });
+    expect(config).toBeNull();
+    expect(errors.min_relative_prominence).toBe("must be ≤ 1");
   });
 });
 

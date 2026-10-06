@@ -1,5 +1,5 @@
 node_modules/
-dist/
+# dist/ is committed on purpose: the Pi serves it and needs no Node.js
 *.tsbuildinfo
 .vite/
 coverage/

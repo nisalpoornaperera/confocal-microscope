@@ -9,6 +9,7 @@ __pycache__/
 .coverage
 htmlcov/
 dist/
+!frontend/dist/
 build/
 
 # Runtime data (SQLite metadata, HDF5 measurements, deployed ML models)

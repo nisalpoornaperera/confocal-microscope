@@ -1031,6 +1031,12 @@ export interface components {
              */
             edge_margin_samples: number;
             /**
+             * Accept Weak Peaks
+             * @description Low-contrast mode: keep a peak that is not significant against the noise (the fixed 4-sigma rule) as long as it passes min_snr and min_relative_prominence. Such points get the 'weak_peak' flag and are at most LOW_CONFIDENCE, never VALID.
+             * @default false
+             */
+            accept_weak_peaks: boolean;
+            /**
              * Min Confidence
              * @description Below this the point is LOW_CONFIDENCE, not VALID.
              * @default 0.5
@@ -1306,6 +1312,12 @@ export interface components {
              * @default 12
              */
             fine_z_range_um: number;
+            /**
+             * Fine Scan
+             * @description Run the fine Z sweep around the coarse peak. When false the surface is analysed from the coarse sweep alone (faster; useful for low-contrast samples whose peak is broad compared with the fine range).
+             * @default true
+             */
+            fine_scan: boolean;
             /** @default serpentine */
             order: components["schemas"]["ScanOrder"];
             /**

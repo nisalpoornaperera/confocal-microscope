@@ -283,7 +283,7 @@ class ScanPlan:
         cfg = self.config
         if not self.is_confocal:
             return 1, 1
-        fine = sweep_length(cfg.fine_z_range_um, cfg.fine_z_step_um)
+        fine = sweep_length(cfg.fine_z_range_um, cfg.fine_z_step_um) if cfg.fine_scan else 0
         first = sweep_length(cfg.z_range_um, cfg.coarse_z_step_um) + fine
         if not cfg.adaptive_z:
             return first, first
@@ -301,8 +301,9 @@ class ScanPlan:
         if not self.is_confocal:
             return 0.0
         typical = cfg.adaptive_z_range_um if cfg.adaptive_z else cfg.z_range_um
-        per_point_first = 2.0 * (cfg.z_range_um + cfg.fine_z_range_um)
-        per_point = 2.0 * (typical + cfg.fine_z_range_um)
+        fine = cfg.fine_z_range_um if cfg.fine_scan else 0.0
+        per_point_first = 2.0 * (cfg.z_range_um + fine)
+        per_point = 2.0 * (typical + fine)
         return per_point_first + (self.total_points - 1) * per_point
 
     def _xy_travel_time_s(self) -> float:
@@ -372,7 +373,7 @@ class ScanPlan:
                 "motor resolution; neighbouring points will coincide"
             )
         if self.is_confocal:
-            if cfg.fine_z_step_um < MOTOR_RESOLUTION_UM:
+            if cfg.fine_scan and cfg.fine_z_step_um < MOTOR_RESOLUTION_UM:
                 warnings.append(
                     f"fine_z_step_um {cfg.fine_z_step_um:g} um is below the "
                     f"~{MOTOR_RESOLUTION_UM} um motor resolution; Z positions will repeat"

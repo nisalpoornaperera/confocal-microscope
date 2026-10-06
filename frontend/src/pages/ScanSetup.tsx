@@ -21,11 +21,13 @@ import { useAction, useApiData, useDebounced } from "../hooks/useApi";
 import { describeEstimate, describeEstimateError, type EstimateView } from "../lib/estimate";
 import { formatLength } from "../lib/format";
 import {
+  applyDetectionPreset,
   configToForm,
   DEFAULT_SCAN_FORM,
   formToConfig,
   loadStoredForm,
   storeForm,
+  type DetectionPreset,
   type NumericField,
   type ScanConfigBody,
   type ScanForm,
@@ -114,6 +116,13 @@ export default function ScanSetup() {
     value: form[key],
     onChange: (value: string) => {
       set(key, value);
+    },
+  });
+  /** Detection thresholds: editing one by hand makes the preset "custom". */
+  const detection = (key: NumericField) => ({
+    value: form[key],
+    onChange: (value: string) => {
+      setForm((current) => ({ ...current, [key]: value, detection_preset: "custom" }));
     },
   });
 
@@ -292,11 +301,30 @@ export default function ScanSetup() {
                     {...num("z_range_um")}
                   />
                   <NumberField label="Coarse Z step" unit={unit} error={errors.coarse_z_step_um} {...num("coarse_z_step_um")} />
-                  <NumberField label="Fine Z step" unit={unit} error={errors.fine_z_step_um} {...num("fine_z_step_um")} />
+                  <CheckField
+                    label="Fine Z scan"
+                    hint={
+                      form.fine_scan
+                        ? "Second, finer sweep around the coarse peak"
+                        : "Off: the surface is found from the coarse sweep alone (faster)"
+                    }
+                    checked={form.fine_scan}
+                    onChange={(value) => {
+                      set("fine_scan", value);
+                    }}
+                  />
+                  <NumberField
+                    label="Fine Z step"
+                    unit={unit}
+                    error={form.fine_scan ? errors.fine_z_step_um : undefined}
+                    disabled={!form.fine_scan}
+                    {...num("fine_z_step_um")}
+                  />
                   <NumberField
                     label="Fine range"
                     unit={unit}
-                    error={errors.fine_z_range_um}
+                    error={form.fine_scan ? errors.fine_z_range_um : undefined}
+                    disabled={!form.fine_scan}
                     hint="Full width of the fine sweep (≥ 2 × coarse step)"
                     {...num("fine_z_range_um")}
                   />
@@ -371,6 +399,72 @@ export default function ScanSetup() {
               />
             </div>
           </fieldset>
+
+          {confocal && (
+            <fieldset>
+              <legend>Peak detection</legend>
+              <div className="form-grid" style={{ alignItems: "end" }}>
+                <SelectField
+                  label="Preset"
+                  hint={
+                    form.detection_preset === "low_contrast"
+                      ? "For weak I(Z) peaks: weak points are kept, marked low-confidence"
+                      : form.detection_preset === "standard"
+                        ? "Strict: only clear peaks become surface points"
+                        : "Your own thresholds"
+                  }
+                  value={form.detection_preset}
+                  options={[
+                    { value: "standard", label: "Standard" },
+                    { value: "low_contrast", label: "Low contrast (sensitive)" },
+                    { value: "custom", label: "Custom" },
+                  ]}
+                  onChange={(value: DetectionPreset) => {
+                    setForm((current) => applyDetectionPreset(current, value));
+                  }}
+                />
+                <CheckField
+                  label="Accept weak peaks"
+                  hint="Keep peaks that are hard to tell from the noise (never marked valid)"
+                  checked={form.accept_weak_peaks}
+                  onChange={(value) => {
+                    setForm((current) => ({ ...current, accept_weak_peaks: value, detection_preset: "custom" }));
+                  }}
+                />
+                <NumberField label="Min SNR" error={errors.min_snr} min={0} {...detection("min_snr")} />
+                <NumberField
+                  label="Min relative prominence"
+                  hint="0 … 1: how far the signal must fall on both sides of the peak"
+                  error={errors.min_relative_prominence}
+                  min={0}
+                  max={1}
+                  {...detection("min_relative_prominence")}
+                />
+                <NumberField
+                  label="Min confidence (valid point)"
+                  hint="Below this a point is low-confidence"
+                  error={errors.min_confidence}
+                  min={0}
+                  max={1}
+                  {...detection("min_confidence")}
+                />
+                <NumberField
+                  label="Min confidence (surface)"
+                  hint="Lowest confidence used to build the surface"
+                  error={errors.reconstruction_min_confidence}
+                  min={0}
+                  max={1}
+                  {...detection("reconstruction_min_confidence")}
+                />
+              </div>
+              {form.accept_weak_peaks && (
+                <p className="small muted" style={{ marginTop: "0.5rem" }}>
+                  Weak peaks are flagged <code>weak_peak</code> and are at most low-confidence. They only appear in
+                  the surface if their confidence is at least the surface minimum above.
+                </p>
+              )}
+            </fieldset>
+          )}
 
           {confocal && (
             <fieldset>

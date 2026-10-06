@@ -97,6 +97,14 @@ class ScanConfig(BaseModel):
     coarse_z_step_um: float = Field(2.0, gt=0)
     fine_z_step_um: float = Field(0.25, gt=0)
     fine_z_range_um: float = Field(12.0, gt=0, description="Full width of the fine Z sweep.")
+    fine_scan: bool = Field(
+        default=True,
+        description=(
+            "Run the fine Z sweep around the coarse peak. When false the surface is "
+            "analysed from the coarse sweep alone (faster; useful for low-contrast "
+            "samples whose peak is broad compared with the fine range)."
+        ),
+    )
 
     order: ScanOrder = ScanOrder.SERPENTINE
     adaptive_z: bool = Field(
@@ -140,25 +148,29 @@ class ScanConfig(BaseModel):
         if self.total_points > MAX_SCAN_POINTS:
             raise ValueError(f"scan has {self.total_points} points (max {MAX_SCAN_POINTS})")
         if self.mode is ScanMode.CONFOCAL:
-            if self.fine_z_step_um > self.coarse_z_step_um:
-                raise ValueError("fine_z_step_um must be <= coarse_z_step_um")
-            if self.fine_z_range_um > self.z_range_um:
-                raise ValueError("fine_z_range_um must be <= z_range_um")
-            if self.fine_z_range_um < 2 * self.coarse_z_step_um:
-                raise ValueError(
-                    "fine_z_range_um must be >= 2 x coarse_z_step_um so the fine sweep "
-                    "covers the coarse quantisation"
-                )
             if self.adaptive_z_range_um > self.z_range_um:
                 raise ValueError("adaptive_z_range_um must be <= z_range_um")
-            per_point = axis_count(0.0, self.z_range_um, self.coarse_z_step_um) + axis_count(
-                0.0, self.fine_z_range_um, self.fine_z_step_um
-            )
+            per_point = axis_count(0.0, self.z_range_um, self.coarse_z_step_um)
+            if self.fine_scan:
+                self._validate_fine()
+                per_point += axis_count(0.0, self.fine_z_range_um, self.fine_z_step_um)
             if per_point > MAX_Z_POSITIONS_PER_POINT:
                 raise ValueError(
                     f"{per_point} Z positions per point (max {MAX_Z_POSITIONS_PER_POINT})"
                 )
         return self
+
+    def _validate_fine(self) -> None:
+        """Relations between the fine and the coarse sweep (only with ``fine_scan``)."""
+        if self.fine_z_step_um > self.coarse_z_step_um:
+            raise ValueError("fine_z_step_um must be <= coarse_z_step_um")
+        if self.fine_z_range_um > self.z_range_um:
+            raise ValueError("fine_z_range_um must be <= z_range_um")
+        if self.fine_z_range_um < 2 * self.coarse_z_step_um:
+            raise ValueError(
+                "fine_z_range_um must be >= 2 x coarse_z_step_um so the fine sweep "
+                "covers the coarse quantisation"
+            )
 
 
 class ScanEstimate(BaseModel):

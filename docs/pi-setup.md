@@ -164,3 +164,21 @@ should come up in the scanner UI. Alt+F4 leaves kiosk mode.
 Safety reminders: the software e-stop stops the motors but cannot switch the
 manual laser off; the motor power switch is the hardware e-stop. Never look
 into the laser beam or its reflections.
+
+## Low-contrast samples
+
+If the I(Z) curves show only a small bump and most points end up `no_peak`:
+
+1. **Fix the optics first** - it is the real cure: keep the OPT101 fully dark
+   apart from the light through the pinhole, align the pinhole with the focus,
+   and check the signal is not saturated (add an ND filter if it is) nor far
+   too weak (laser power, alignment).
+2. **Scan Setup -> Peak detection -> Preset "Low contrast (sensitive)"**: keeps
+   peaks that are hard to tell from the noise (minimum SNR 2, relative
+   prominence 0.05). Such points are flagged `weak_peak` and are at most
+   *low-confidence*, never *valid*. The preset also lowers the surface's
+   minimum confidence to 0.1 so they are used in the 3-D surface; check the
+   confidence map to see how much to trust each area.
+3. **Fine Z scan off** (Scan Setup -> Z): the surface is found from the coarse
+   sweep alone. Use a smaller coarse step (e.g. 0.5-1 um) instead; this is
+   faster and helps when the peak is broad compared with the fine range.

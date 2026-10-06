@@ -21,6 +21,9 @@ Status precedence (first match wins)::
     NO_PEAK         no significant peak, SNR < min_snr or relative prominence
                     < min_relative_prominence
     PEAK_AT_EDGE    the maximum lies within edge_margin_samples of a sweep end
+    (with ``accept_weak_peaks`` a peak below the fixed significance rule is kept
+    as a *weak peak* if it passes min_snr / min_relative_prominence; it is
+    flagged ``weak_peak`` and is at most LOW_CONFIDENCE)
     FIT_FAILED      neither fit gives a usable surface height
     LOW_CONFIDENCE  confidence < min_confidence, or the selected peak is not the
                     brightest signal of the sweep (``global_max_not_selected``:
@@ -126,6 +129,7 @@ class ProfileFlag(StrEnum):
     GAUSSIAN_FAILED = "gaussian_failed"
     GAUSSIAN_OUTSIDE_SWEEP = "gaussian_outside_sweep"
     FIT_DISAGREEMENT = "fit_disagreement"
+    WEAK_PEAK = "weak_peak"
 
 
 # --------------------------------------------------------------------------- detection
@@ -238,7 +242,11 @@ def _locate(
     snr = compute_snr(peak_value, baseline, noise)
     rel = relative_prominence(None if main is None else main.prominence, peak_value, baseline)
     if main is None or not peaks.significant:
-        flags.append(ProfileFlag.NO_PEAK)
+        if config.accept_weak_peaks and main is not None and main.prominence > 0.0:
+            # Low-contrast mode: keep the best candidate; SNR / prominence below.
+            flags.append(ProfileFlag.WEAK_PEAK)
+        else:
+            flags.append(ProfileFlag.NO_PEAK)
     if snr is None or snr < config.min_snr:
         flags.append(ProfileFlag.LOW_SNR)
     if rel is None or rel < config.min_relative_prominence:
@@ -381,7 +389,8 @@ def _status(
         return PointStatus.PEAK_AT_EDGE
     if surface_z is None:
         return PointStatus.FIT_FAILED
-    if confidence < minimum or located.peaks.global_max_not_selected:
+    weak = ProfileFlag.WEAK_PEAK in located.flags
+    if confidence < minimum or located.peaks.global_max_not_selected or weak:
         return PointStatus.LOW_CONFIDENCE
     return PointStatus.VALID
 

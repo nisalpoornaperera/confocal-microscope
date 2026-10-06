@@ -4,7 +4,9 @@ For every XY point in plan order the executor moves to (x, y) at the current
 Z, centres a coarse Z sweep on the adaptive estimate, locates the coarse peak
 (retrying once over the full range when a narrow adaptive sweep missed it),
 runs a fine sweep around it and hands the fine profile, with the Z positions
-*reported* by the stage, to the injected physics pipeline. The complete raw
+*reported* by the stage, to the injected physics pipeline. With
+``ScanConfig.fine_scan = False`` the fine sweep is skipped and the last coarse
+sweep is analysed instead. The complete raw
 profile, the analysis and the scalar result are persisted before the next
 point starts, so a crash loses at most the point being measured.
 
@@ -198,7 +200,7 @@ class ScanExecutor:
 
         estimate = self._estimator.estimate(gp)
         ctx.z_estimate_um = estimate.center_um
-        peak = await self._coarse_sweep(ctx, estimate.center_um, estimate.width_um)
+        peak, coarse = await self._coarse_sweep(ctx, estimate.center_um, estimate.width_um)
         if estimate.source != "default" and (
             not peak.found or peak.at_edge or peak.global_max_not_selected
         ):
@@ -206,7 +208,11 @@ class ScanExecutor:
             # or caught only part of it (the brightest signal is not the selected
             # peak): repeat once over the full configured range before giving up.
             ctx.flag(FLAG_COARSE_RETRY)
-            peak = await self._coarse_sweep(ctx, cfg.z_center_um, cfg.z_range_um)
+            peak, coarse = await self._coarse_sweep(ctx, cfg.z_center_um, cfg.z_range_um)
+        if not cfg.fine_scan:
+            # Coarse-only mode: the (last) coarse sweep is the analysed profile.
+            analysis, filtered = await self._analyse_part(ctx, coarse)
+            return self._analysed(ctx, analysis, (coarse, filtered))
         if not peak.found or peak.z_um is None or not math.isfinite(peak.z_um):
             return self._analysed(ctx, no_peak_analysis(self._calibration.signal_units), None)
 
@@ -214,7 +220,7 @@ class ScanExecutor:
             ctx, peak.z_um, cfg.fine_z_range_um, cfg.fine_z_step_um, FLAG_FINE_CLIPPED
         )
         fine = await self._sweep(ctx, fine_z, ProfilePhase.FINE)
-        analysis, filtered = await self._analyse_fine(ctx, fine)
+        analysis, filtered = await self._analyse_part(ctx, fine)
         return self._analysed(ctx, analysis, (fine, filtered))
 
     async def _measure_fixed_z(self, ctx: PointContext) -> _PointResult:
@@ -232,7 +238,8 @@ class ScanExecutor:
     # ------------------------------------------------------------------ sweeps
     async def _coarse_sweep(
         self, ctx: PointContext, center_um: float, width_um: float
-    ) -> CoarsePeak:
+    ) -> tuple[CoarsePeak, slice]:
+        """Sweep, locate the coarse peak; returns it with the sweep's buffer slice."""
         cfg = self._config
         positions = self._sweep_positions(
             ctx, center_um, width_um, cfg.coarse_z_step_um, FLAG_COARSE_CLIPPED
@@ -248,7 +255,7 @@ class ScanExecutor:
             )
         )
         ctx.coarse_peak = peak
-        return peak
+        return peak, part
 
     def _sweep_positions(
         self, ctx: PointContext, center_um: float, width_um: float, step_um: float, flag: str
@@ -329,15 +336,16 @@ class ScanExecutor:
         except Exception as exc:
             raise _AnalysisFailedError(f"{type(exc).__name__}: {exc}") from exc
 
-    async def _analyse_fine(
-        self, ctx: PointContext, fine: slice
+    async def _analyse_part(
+        self, ctx: PointContext, part: slice
     ) -> tuple[ProfileAnalysis, NDArray[np.float64]]:
-        z_reported = ctx.buffer.reported_z(fine)
+        """Full analysis of one sweep (the fine sweep, or the coarse one in coarse-only mode)."""
+        z_reported = ctx.buffer.reported_z(part)
         processed = await self._run_analysis(
             functools.partial(
                 self._analyse_profile,
                 z_reported,
-                ctx.buffer.aggregated(fine),
+                ctx.buffer.aggregated(part),
                 dark_v=self._calibration.dark_v,
                 reference_v=self._calibration.reference_v,
                 config=self._processing(ctx),

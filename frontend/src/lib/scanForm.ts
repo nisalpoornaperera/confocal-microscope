@@ -7,6 +7,7 @@
  */
 import type {
   InterpolationMethod,
+  ProcessingConfig,
   ReconstructionRequest,
   SamplingMethod,
   ScanConfig,
@@ -17,8 +18,46 @@ import { readStorage, writeStorage } from "./prefs";
 
 /** Body of `POST /scans` and `/scans/estimate` (nested defaults filled in by the backend). */
 export type ScanConfigBody = Omit<ScanConfig, "processing" | "reconstruction"> & {
+  processing?: Partial<ProcessingConfig>;
   reconstruction?: Partial<ReconstructionRequest>;
 };
+
+/** Peak-detection presets. "low_contrast" relaxes the thresholds for weak I(Z) peaks. */
+export type DetectionPreset = "standard" | "low_contrast" | "custom";
+
+export const DETECTION_PRESETS: Record<
+  Exclude<DetectionPreset, "custom">,
+  Pick<
+    ScanForm,
+    | "accept_weak_peaks"
+    | "min_snr"
+    | "min_relative_prominence"
+    | "min_confidence"
+    | "reconstruction_min_confidence"
+  >
+> = {
+  // The backend's ProcessingConfig / ReconstructionRequest defaults.
+  standard: {
+    accept_weak_peaks: false,
+    min_snr: "5",
+    min_relative_prominence: "0.3",
+    min_confidence: "0.5",
+    reconstruction_min_confidence: "0.5",
+  },
+  low_contrast: {
+    accept_weak_peaks: true,
+    min_snr: "2",
+    min_relative_prominence: "0.05",
+    min_confidence: "0.2",
+    reconstruction_min_confidence: "0.1",
+  },
+};
+
+/** Apply a preset to the form (custom keeps the current values). */
+export function applyDetectionPreset(form: ScanForm, preset: DetectionPreset): ScanForm {
+  if (preset === "custom") return { ...form, detection_preset: "custom" };
+  return { ...form, ...DETECTION_PRESETS[preset], detection_preset: preset };
+}
 
 export interface ScanForm {
   name: string;
@@ -33,6 +72,7 @@ export interface ScanForm {
   coarse_z_step_um: string;
   fine_z_step_um: string;
   fine_z_range_um: string;
+  fine_scan: boolean;
   order: ScanOrder;
   adaptive_z: boolean;
   adaptive_z_range_um: string;
@@ -44,6 +84,12 @@ export interface ScanForm {
   reconstruct_on_complete: boolean;
   reconstruction_method: InterpolationMethod;
   ml_on_complete: boolean;
+  detection_preset: DetectionPreset;
+  accept_weak_peaks: boolean;
+  min_snr: string;
+  min_relative_prominence: string;
+  min_confidence: string;
+  reconstruction_min_confidence: string;
 }
 
 /** Defaults: the backend's ScanConfig defaults and the README's first-scan example. */
@@ -60,6 +106,7 @@ export const DEFAULT_SCAN_FORM: ScanForm = {
   coarse_z_step_um: "2",
   fine_z_step_um: "0.25",
   fine_z_range_um: "12",
+  fine_scan: true,
   order: "serpentine",
   adaptive_z: true,
   adaptive_z_range_um: "30",
@@ -71,6 +118,12 @@ export const DEFAULT_SCAN_FORM: ScanForm = {
   reconstruct_on_complete: true,
   reconstruction_method: "linear",
   ml_on_complete: false,
+  detection_preset: "standard",
+  accept_weak_peaks: false,
+  min_snr: "5",
+  min_relative_prominence: "0.3",
+  min_confidence: "0.5",
+  reconstruction_min_confidence: "0.5",
 };
 
 export const NUMERIC_FIELDS = [
@@ -87,6 +140,10 @@ export const NUMERIC_FIELDS = [
   "adaptive_z_range_um",
   "samples_per_z",
   "settle_time_ms",
+  "min_snr",
+  "min_relative_prominence",
+  "min_confidence",
+  "reconstruction_min_confidence",
 ] as const satisfies readonly (keyof ScanForm)[];
 
 export type NumericField = (typeof NUMERIC_FIELDS)[number];
@@ -120,6 +177,10 @@ const RULES: Record<NumericField, NumberRule> = {
   adaptive_z_range_um: { above: 0 },
   samples_per_z: { min: 1, max: 256, integer: true },
   settle_time_ms: { min: 0, max: 10_000 },
+  min_snr: { min: 0 },
+  min_relative_prominence: { min: 0, max: 1 },
+  min_confidence: { min: 0, max: 1 },
+  reconstruction_min_confidence: { min: 0, max: 1 },
 };
 
 /** Fields only used in confocal mode (ignored, not validated, for fixed-Z scans). */
@@ -129,7 +190,14 @@ export const CONFOCAL_ONLY: readonly NumericField[] = [
   "fine_z_step_um",
   "fine_z_range_um",
   "adaptive_z_range_um",
+  "min_snr",
+  "min_relative_prominence",
+  "min_confidence",
+  "reconstruction_min_confidence",
 ];
+
+/** Fields only used when the fine Z sweep is on. */
+export const FINE_ONLY: readonly NumericField[] = ["fine_z_step_um", "fine_z_range_um"];
 
 export function parseNumber(text: string, rule: NumberRule): { value?: number; error?: string } {
   const trimmed = text.trim();
@@ -149,7 +217,7 @@ export function formToConfig(form: ScanForm): FormResult {
   const confocal = form.mode === "confocal";
   for (const key of NUMERIC_FIELDS) {
     const rule = RULES[key];
-    if (!confocal && CONFOCAL_ONLY.includes(key)) {
+    if ((!confocal && CONFOCAL_ONLY.includes(key)) || (!form.fine_scan && FINE_ONLY.includes(key))) {
       const parsed = parseNumber(form[key], rule);
       values[key] = parsed.value ?? Number(DEFAULT_SCAN_FORM[key]);
       continue;
@@ -182,6 +250,7 @@ export function formToConfig(form: ScanForm): FormResult {
     coarse_z_step_um: v("coarse_z_step_um"),
     fine_z_step_um: v("fine_z_step_um"),
     fine_z_range_um: v("fine_z_range_um"),
+    fine_scan: form.fine_scan,
     order: form.order,
     adaptive_z: form.adaptive_z,
     adaptive_z_range_um: v("adaptive_z_range_um"),
@@ -191,7 +260,16 @@ export function formToConfig(form: ScanForm): FormResult {
     home_before_scan: form.home_before_scan,
     calibrate_dark_before_scan: form.calibrate_dark_before_scan,
     reconstruct_on_complete: confocal && form.reconstruct_on_complete,
-    reconstruction: { method: form.reconstruction_method },
+    processing: {
+      accept_weak_peaks: form.accept_weak_peaks,
+      min_snr: v("min_snr"),
+      min_relative_prominence: v("min_relative_prominence"),
+      min_confidence: v("min_confidence"),
+    },
+    reconstruction: {
+      method: form.reconstruction_method,
+      min_confidence: v("reconstruction_min_confidence"),
+    },
     ml_on_complete: confocal && form.ml_on_complete,
   };
   return { config, errors };
@@ -213,6 +291,7 @@ export function configToForm(config: ScanConfig): ScanForm {
     coarse_z_step_um: s(config.coarse_z_step_um),
     fine_z_step_um: s(config.fine_z_step_um),
     fine_z_range_um: s(config.fine_z_range_um),
+    fine_scan: config.fine_scan,
     order: config.order,
     adaptive_z: config.adaptive_z,
     adaptive_z_range_um: s(config.adaptive_z_range_um),
@@ -224,6 +303,12 @@ export function configToForm(config: ScanConfig): ScanForm {
     reconstruct_on_complete: config.reconstruct_on_complete,
     reconstruction_method: config.reconstruction?.method ?? "linear",
     ml_on_complete: config.ml_on_complete,
+    detection_preset: "custom",
+    accept_weak_peaks: config.processing?.accept_weak_peaks ?? false,
+    min_snr: s(config.processing?.min_snr ?? 5),
+    min_relative_prominence: s(config.processing?.min_relative_prominence ?? 0.3),
+    min_confidence: s(config.processing?.min_confidence ?? 0.5),
+    reconstruction_min_confidence: s(config.reconstruction?.min_confidence ?? 0.5),
   };
 }
 
@@ -232,6 +317,7 @@ const ENUM_FIELDS: Record<string, readonly string[] | undefined> = {
   order: ["serpentine", "raster"],
   sampling_method: ["mean", "median"],
   reconstruction_method: ["nearest", "linear", "cubic", "rbf"],
+  detection_preset: ["standard", "low_contrast", "custom"],
 };
 
 export const FORM_STORAGE_KEY = "confocal.ui.scanForm.v1";
