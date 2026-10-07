@@ -22,6 +22,9 @@ export type ScanConfigBody = Omit<ScanConfig, "processing" | "reconstruction"> &
   reconstruction?: Partial<ReconstructionRequest>;
 };
 
+/** How the surface peak is chosen when an I(Z) curve has several peaks. */
+export type PeakSelection = "most_prominent" | "highest";
+
 /** Peak-detection presets. "low_contrast" relaxes the thresholds for weak I(Z) peaks. */
 export type DetectionPreset = "standard" | "low_contrast" | "custom";
 
@@ -30,6 +33,7 @@ export const DETECTION_PRESETS: Record<
   Pick<
     ScanForm,
     | "accept_weak_peaks"
+    | "peak_selection"
     | "min_snr"
     | "min_relative_prominence"
     | "min_confidence"
@@ -39,6 +43,7 @@ export const DETECTION_PRESETS: Record<
   // The backend's ProcessingConfig / ReconstructionRequest defaults.
   standard: {
     accept_weak_peaks: false,
+    peak_selection: "most_prominent",
     min_snr: "5",
     min_relative_prominence: "0.3",
     min_confidence: "0.5",
@@ -46,6 +51,7 @@ export const DETECTION_PRESETS: Record<
   },
   low_contrast: {
     accept_weak_peaks: true,
+    peak_selection: "highest",
     min_snr: "2",
     min_relative_prominence: "0.05",
     min_confidence: "0.2",
@@ -86,6 +92,7 @@ export interface ScanForm {
   ml_on_complete: boolean;
   detection_preset: DetectionPreset;
   accept_weak_peaks: boolean;
+  peak_selection: PeakSelection;
   min_snr: string;
   min_relative_prominence: string;
   min_confidence: string;
@@ -120,6 +127,7 @@ export const DEFAULT_SCAN_FORM: ScanForm = {
   ml_on_complete: false,
   detection_preset: "standard",
   accept_weak_peaks: false,
+  peak_selection: "most_prominent",
   min_snr: "5",
   min_relative_prominence: "0.3",
   min_confidence: "0.5",
@@ -262,6 +270,7 @@ export function formToConfig(form: ScanForm): FormResult {
     reconstruct_on_complete: confocal && form.reconstruct_on_complete,
     processing: {
       accept_weak_peaks: form.accept_weak_peaks,
+      peak_selection: form.peak_selection,
       min_snr: v("min_snr"),
       min_relative_prominence: v("min_relative_prominence"),
       min_confidence: v("min_confidence"),
@@ -305,6 +314,7 @@ export function configToForm(config: ScanConfig): ScanForm {
     ml_on_complete: config.ml_on_complete,
     detection_preset: "custom",
     accept_weak_peaks: config.processing?.accept_weak_peaks ?? false,
+    peak_selection: config.processing?.peak_selection ?? "most_prominent",
     min_snr: s(config.processing?.min_snr ?? 5),
     min_relative_prominence: s(config.processing?.min_relative_prominence ?? 0.3),
     min_confidence: s(config.processing?.min_confidence ?? 0.5),
@@ -318,6 +328,7 @@ const ENUM_FIELDS: Record<string, readonly string[] | undefined> = {
   sampling_method: ["mean", "median"],
   reconstruction_method: ["nearest", "linear", "cubic", "rbf"],
   detection_preset: ["standard", "low_contrast", "custom"],
+  peak_selection: ["most_prominent", "highest"],
 };
 
 export const FORM_STORAGE_KEY = "confocal.ui.scanForm.v1";

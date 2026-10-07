@@ -1031,6 +1031,13 @@ export interface components {
              */
             edge_margin_samples: number;
             /**
+             * Peak Selection
+             * @description Which candidate is the surface when the I(Z) curve has several peaks: the most prominent one (robust against a bright but broad background) or the highest intensity (the global maximum of the smoothed signal).
+             * @default most_prominent
+             * @enum {string}
+             */
+            peak_selection: "most_prominent" | "highest";
+            /**
              * Accept Weak Peaks
              * @description Low-contrast mode: keep a peak that is not significant against the noise (the fixed 4-sigma rule) as long as it passes min_snr and min_relative_prominence. Such points get the 'weak_peak' flag and are at most LOW_CONFIDENCE, never VALID.
              * @default false

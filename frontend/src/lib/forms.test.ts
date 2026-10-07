@@ -71,6 +71,7 @@ describe("scan form", () => {
     const { config } = formToConfig(form);
     expect(config?.processing).toEqual({
       accept_weak_peaks: true,
+      peak_selection: "highest",
       min_snr: 2,
       min_relative_prominence: 0.05,
       min_confidence: 0.2,
@@ -79,6 +80,7 @@ describe("scan form", () => {
     const back = applyDetectionPreset(form, "standard");
     expect(formToConfig(back).config?.processing?.accept_weak_peaks).toBe(false);
     expect(formToConfig(back).config?.processing?.min_snr).toBe(5);
+    expect(formToConfig(back).config?.processing?.peak_selection).toBe("most_prominent");
   });
 
   it("rejects out-of-range detection thresholds", () => {

@@ -66,6 +66,14 @@ class ProcessingConfig(BaseModel):
     edge_margin_samples: int = Field(
         2, ge=0, le=50, description="A peak this close to the sweep end is 'at edge'."
     )
+    peak_selection: Literal["most_prominent", "highest"] = Field(
+        default="most_prominent",
+        description=(
+            "Which candidate is the surface when the I(Z) curve has several peaks: the "
+            "most prominent one (robust against a bright but broad background) or the "
+            "highest intensity (the global maximum of the smoothed signal)."
+        ),
+    )
     accept_weak_peaks: bool = Field(
         default=False,
         description=(

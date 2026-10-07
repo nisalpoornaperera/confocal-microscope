@@ -43,6 +43,7 @@ caller must not trust it as a clean measurement.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 import numpy as np
 from numpy.typing import NDArray
@@ -93,9 +94,13 @@ class PeakInfo:
         return float(np.clip((right - left) / total, -1.0, 1.0))
 
 
+#: How the main peak is chosen among the candidates (ProcessingConfig.peak_selection).
+PeakSelection = Literal["most_prominent", "highest"]
+
+
 @dataclass(frozen=True, slots=True)
 class PeakDetection:
-    main: PeakInfo | None  # most prominent candidate, even if below min_prominence
+    main: PeakInfo | None  # selected candidate (see PeakSelection), even if below min_prominence
     significant: bool  # main.prominence >= min_prominence (and > 0)
     n_peaks: int  # candidates with prominence >= min_prominence
     secondary_peak_ratio: float | None  # None without a significant main peak
@@ -243,6 +248,7 @@ def detect_peaks(
     baseline: float,
     min_prominence: float,
     edge_margin_samples: int,
+    select: PeakSelection = "most_prominent",
 ) -> PeakDetection:
     """Find the main peak of a Z-sorted, finite profile and describe it.
 
@@ -267,8 +273,12 @@ def detect_peaks(
         ],
         dtype=np.float64,
     )
-    # Most prominent first; ties broken by height, then by position.
-    order = np.lexsort((candidates, -y[candidates], -prominences))
+    if select == "highest":
+        # Highest candidate first; ties broken by prominence, then by position.
+        order = np.lexsort((candidates, -prominences, -y[candidates]))
+    else:
+        # Most prominent first; ties broken by height, then by position.
+        order = np.lexsort((candidates, -y[candidates], -prominences))
     best = int(order[0])
     index = int(candidates[best])
     main_prominence = float(prominences[best])
@@ -294,9 +304,9 @@ def detect_peaks(
         return PeakDetection(main=main, significant=False, n_peaks=0, secondary_peak_ratio=None)
     global_max_not_selected = max(values) - height > max(min_prominence, 0.0)
 
-    strong = np.sort(prominences[significant_mask])
-    n_peaks = int(strong.shape[0])
-    secondary = float(strong[-2] / main_prominence) if n_peaks > 1 else 0.0
+    n_peaks = int(np.count_nonzero(significant_mask))
+    others = np.delete(prominences, best)[np.delete(significant_mask, best)]
+    secondary = float(np.max(others) / main_prominence) if others.size else 0.0
     return PeakDetection(
         main=main,
         significant=True,

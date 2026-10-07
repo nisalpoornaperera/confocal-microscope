@@ -29,6 +29,7 @@ import {
   storeForm,
   type DetectionPreset,
   type NumericField,
+  type PeakSelection,
   type ScanConfigBody,
   type ScanForm,
 } from "../lib/scanForm";
@@ -99,6 +100,9 @@ export default function ScanSetup() {
   const location = useLocation();
   const { prefs } = usePreferences();
   const { scanActive, activeScanId, estopEngaged, status, info } = useSystem();
+  // A manual laser cannot be switched off by the scanner, so a pre-scan dark
+  // calibration is impossible (the backend refuses it): never request it then.
+  const laserControllable = status?.hardware.laser.controllable ?? true;
   const [form, setForm] = useState<ScanForm>(() => {
     const repeat = (location.state as RepeatState | null)?.repeat;
     return repeat ? configToForm(repeat) : loadStoredForm();
@@ -126,7 +130,14 @@ export default function ScanSetup() {
     },
   });
 
-  const { config, errors } = useMemo(() => formToConfig(form), [form]);
+  const { config, errors } = useMemo(
+    () =>
+      formToConfig({
+        ...form,
+        calibrate_dark_before_scan: form.calibrate_dark_before_scan && laserControllable,
+      }),
+    [form, laserControllable],
+  );
   const configKey = config ? JSON.stringify(config) : null;
   const debouncedKey = useDebounced(configKey, ESTIMATE_DEBOUNCE_MS);
 
@@ -391,8 +402,13 @@ export default function ScanSetup() {
               />
               <CheckField
                 label="Dark calibration before scanning"
-                hint="Needs a software-switchable laser; with the manual laser, calibrate on the Calibration page first"
-                checked={form.calibrate_dark_before_scan}
+                hint={
+                  laserControllable
+                    ? "Switches the laser off, measures the dark level, switches it back on"
+                    : "Not available with the manual laser: run the dark calibration on the Calibration page (it is used automatically)"
+                }
+                disabled={!laserControllable}
+                checked={form.calibrate_dark_before_scan && laserControllable}
                 onChange={(value) => {
                   set("calibrate_dark_before_scan", value);
                 }}
@@ -421,6 +437,22 @@ export default function ScanSetup() {
                   ]}
                   onChange={(value: DetectionPreset) => {
                     setForm((current) => applyDetectionPreset(current, value));
+                  }}
+                />
+                <SelectField
+                  label="Peak choice"
+                  hint={
+                    form.peak_selection === "highest"
+                      ? "Several peaks: the highest intensity is the surface (no penalty for the others)"
+                      : "Several peaks: the most prominent is the surface; a strong second peak lowers confidence"
+                  }
+                  value={form.peak_selection}
+                  options={[
+                    { value: "most_prominent", label: "Most prominent" },
+                    { value: "highest", label: "Highest intensity" },
+                  ]}
+                  onChange={(value: PeakSelection) => {
+                    setForm((current) => ({ ...current, peak_selection: value, detection_preset: "custom" }));
                   }}
                 />
                 <CheckField

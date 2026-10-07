@@ -194,6 +194,7 @@ def _detect(
         baseline=baseline,
         min_prominence=MIN_PEAK_PROMINENCE_NOISE * noise_std,
         edge_margin_samples=config.edge_margin_samples,
+        select=config.peak_selection,
     )
 
 
@@ -467,7 +468,13 @@ def _analyse(
                 # An ambiguous selection is penalised like a truncated peak.
                 at_edge=main.at_edge or located.peaks.global_max_not_selected,
                 saturated_fraction=prepared.saturated_fraction,
-                secondary_peak_ratio=located.peaks.secondary_peak_ratio,
+                # With "highest" the operator has declared the global maximum to be
+                # the surface, so other peaks do not lower the confidence.
+                secondary_peak_ratio=(
+                    None
+                    if config.peak_selection == "highest"
+                    else located.peaks.secondary_peak_ratio
+                ),
             )
         )
     return ProfileAnalysis(
