@@ -8,6 +8,31 @@ Hardware assumed: Raspberry Pi 5 + HDMI monitor + mouse, Arduino Uno + 3 x
 ULN2003 + 3 x 28BYJ-48 on the OpenFlexure Delta Stage, ADS1115 + OPT101 on the
 Pi's 3.3 V, manually switched laser. Wiring and power: [wiring.md](wiring.md).
 
+## Quick setup: one click
+
+1. Flash the Uno (step 4 below) and plug it into the Pi.
+2. Get the project onto the Pi (any folder, e.g. your home folder), either with
+   `git clone https://github.com/nisalpoornaperera/confocal-microscope.git`
+   or by copying the folder from a USB stick.
+3. In the File Manager, double-click **`setup.sh`** in the project folder and
+   choose **Execute in Terminal** (or run `bash setup.sh` in a terminal).
+   Enter your password when asked.
+
+`setup.sh` (`deploy/install.sh`) does steps 1-3 and 6 for you: system
+packages, I2C, uv, the `confocal` user, installation into `/opt/confocal`, the
+Python libraries (using the Pi's own Python), `/etc/confocal/confocal.toml`
+from `config/confocal.pi.toml` with the Uno's port detected, a hardware check,
+the background service, a **Confocal Scanner** desktop icon, the full-screen UI
+at login, and it opens the UI. If I2C was just enabled it asks for one reboot.
+
+Running it again updates the installation and keeps your settings and scans.
+Options: `bash setup.sh --network` (also open the UI from a phone or PC on the
+same network), `--no-autostart`, `--no-hwcheck`, `--help`. If double-clicking
+does not offer "Execute", the executable bit was lost while copying: use
+`bash setup.sh`.
+
+The manual steps below are what the script does, for reference and repairs.
+
 ## 1. Prepare the Pi
 
 ```bash
@@ -118,18 +143,27 @@ sudo systemctl enable --now confocal
 curl -s http://127.0.0.1:8000/api/v1/system/status    # "status":"ok"
 ```
 
-Open the UI full-screen at login. On Raspberry Pi OS with the labwc desktop
-(the default since late 2024) add this line to `~/.config/labwc/autostart` of
-the desktop user (create the file if it does not exist):
+Open the UI full-screen at login with a standard autostart entry (this is what
+`setup.sh` installs):
 
 ```bash
-chromium-browser --kiosk --noerrdialogs --disable-infobars --app=http://127.0.0.1:8000/ &
+mkdir -p ~/.config/autostart
+cat > ~/.config/autostart/confocal-scanner.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=Confocal Scanner
+Exec=chromium-browser --kiosk --noerrdialogs --disable-infobars --app=http://127.0.0.1:8000/
+EOF
 ```
 
-On an older image with the wayfire desktop, add it under `[autostart]` in
-`~/.config/wayfire.ini` instead (`ui = chromium-browser --kiosk ...`). If the
-command is called `chromium` on your image, use that name. Reboot: the Pi
-should come up in the scanner UI. Alt+F4 leaves kiosk mode.
+If the command is called `chromium` on your image, use that name. Reboot: the
+Pi should come up in the scanner UI. Alt+F4 leaves kiosk mode.
+
+Do **not** create `~/.config/labwc/autostart`: a personal labwc autostart file
+replaces the system one, and the taskbar and desktop then no longer start. If
+you added the browser there following an older version of this guide, remove
+that line (and the file, if nothing else is in it), or just run `setup.sh`,
+which does this for you.
 
 ## 7. First scans
 

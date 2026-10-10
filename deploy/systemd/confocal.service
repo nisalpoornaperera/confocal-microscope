@@ -24,7 +24,9 @@ TimeoutStopSec=30
 StateDirectory=confocal
 NoNewPrivileges=true
 ProtectSystem=strict
-ProtectHome=true
+# read-only (not "true"): a uv-managed Python interpreter may live in
+# /home/confocal/.local/share/uv, and the venv's python symlink must resolve.
+ProtectHome=read-only
 ReadWritePaths=/var/lib/confocal
 PrivateTmp=true
 

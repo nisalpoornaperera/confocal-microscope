@@ -1,0 +1,2 @@
+*.sh text eol=lf
+firmware/confocal_stage/* text eol=lf

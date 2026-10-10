@@ -61,6 +61,13 @@ The binding module contracts are in [docs/architecture.md](docs/architecture.md)
 | `frontend/` | Web UI (Phase 9, [plan](frontend/README.md)) |
 | `deploy/` | systemd unit and Raspberry Pi setup |
 
+## Raspberry Pi: one-click setup
+
+Copy or clone the project onto the Pi, then double-click **`setup.sh`** and
+choose *Execute in Terminal* (or run `bash setup.sh`). It installs everything,
+configures this machine, starts the scanner as a service and opens the UI
+full-screen. Run it again to update. Details: [docs/pi-setup.md](docs/pi-setup.md).
+
 ## Quick start (simulation, any PC)
 
 Requires [uv](https://docs.astral.sh/uv/) (it installs Python 3.11+ itself).
